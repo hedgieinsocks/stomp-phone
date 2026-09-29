@@ -31,8 +31,8 @@ Options:
 1. Download the app and make it executable.
 
 ```sh
-curl -sLO https://github.com/hedgieinsocks/namplay/releases/download/v0.1.0/stomp-phone-v.0.1.0-linux-x64
-chmod u+e stomp-phone-v.0.1.0-linux-x64
+curl -sLO https://github.com/hedgieinsocks/stomp-phone/releases/download/v0.1.0/stomp-phone-v0.1.0-linux-x64
+chmod u+x stomp-phone-v0.1.0-linux-x64
 ```
 
 2. Enable virtual raw MIDI devices.
