@@ -7,6 +7,19 @@ Use your smartphone as a MIDI footswitch.
 
 A simple app to serve an HTTP page with a full-screen button that issues MIDI commands.
 
+```mermaid
+flowchart TB
+ subgraph laptop["Laptop"]
+        Tone3000["Tone3000"]
+        StompPhone["Stomp-Phone"]
+  end
+ subgraph smartphone["Smartphone"]
+        Browser["Browser"]
+  end
+    Browser -- HTTP --> StompPhone
+    StompPhone -- MIDI --> Tone3000
+```
+
 ## 🚀 Usage
 
 It was created as a companion app for standalone [TONE3000 plugin](https://github.com/tone-3000/tone3000-plugin) to quickly switch back and forth between clean and overdrive profiles during bedroom jams. But it should work for any other plugin.
