@@ -5,7 +5,7 @@ Use your smartphone as a MIDI footswitch.
 ![Linux](https://img.shields.io/badge/Linux-%23FCC624.svg?style=for-the-badge&logo=linux&logoColor=black)
 ![Go](https://img.shields.io/badge/go-%2300ADD8.svg?style=for-the-badge&logo=go&logoColor=white)
 
-A simple app to serve an HTTP page with big buttons that issue MIDI commands.
+A simple app to serve an HTTP page with 1-3 big buttons that issue MIDI commands.
 
 It was created as a companion app for standalone [TONE3000 plugin](https://github.com/tone-3000/tone3000-plugin) to quickly switch back and forth between clean, crunch and overdrive profiles during bedroom jams. But it should work for any other plugin.
 
