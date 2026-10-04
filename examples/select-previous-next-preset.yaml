@@ -1,0 +1,10 @@
+# two buttons to select the previous or next preset via CC# 1 and CC# 2 messages
+port: 8080
+device: /dev/snd/midiC3D1
+buttons:
+  - caption: prev
+    type: click
+    messageOn: B0 01 7F
+  - caption: next
+    type: click
+    messageOn: B0 02 7F

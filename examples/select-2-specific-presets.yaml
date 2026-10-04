@@ -1,0 +1,8 @@
+# one button to select between two specific presets via PC# 0 and PC# 1 messages
+port: 8080
+device: /dev/snd/midiC3D1
+buttons:
+  - caption: drive
+    type: toggle
+    messageOn: C0 01
+    messageOff: C0 00

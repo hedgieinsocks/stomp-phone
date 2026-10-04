@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"log"
 	"net"
 	"net/http"
@@ -10,100 +12,142 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
+
+	"github.com/go-playground/validator/v10"
+	"gopkg.in/yaml.v3"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
-const page = `<!doctype html>
-<html>
-<head>
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1,
-                 maximum-scale=1, user-scalable=no">
-  <style>
-    html, body {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #000;
-    }
-    body {
-      margin: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    #indicator {
-      width: 120px;
-      height: 120px;
-      border-radius: 50%;
-      background: red;
-      border: 3px solid yellow;
-    }
-    #indicator.enabled {
-      background: green;
-    }
-  </style>
-</head>
-<body>
-  <div id="indicator"></div>
-  <script>
-    const indicator = document.getElementById('indicator');
-    let busy = false;
-    document.addEventListener('touchstart', e => {
-      e.preventDefault();
-      if (busy || e.touches.length > 1) return;
-      busy = true;
-      indicator.classList.toggle('enabled');
-      fetch(location.href, { method: 'POST' });
-    }, { passive: false });
-    const release = e => { if (e.touches.length === 0) busy = false; };
-    document.addEventListener('touchend', release, { passive: true });
-    document.addEventListener('touchcancel', release, { passive: true });
-  </script>
-</body>
-</html>
-`
-
-type Footswitch struct {
-	mu         sync.Mutex
-	enabled    bool
-	send       func([]byte) error
-	enableMsg  []byte
-	disableMsg []byte
+type Config struct {
+	Port    int      `yaml:"port" validate:"required"`
+	Device  string   `yaml:"device" validate:"required"`
+	Buttons []Button `yaml:"buttons" validate:"required,min=1,max=3,dive"`
 }
 
-func (f *Footswitch) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+type Button struct {
+	Type       ButtonType `yaml:"type" validate:"required,oneof=radio toggle click"`
+	Caption    string     `yaml:"caption" validate:"required"`
+	MessageOn  string     `yaml:"messageOn" validate:"required"`
+	MessageOff string     `yaml:"messageOff" validate:"required_if=Type toggle"`
+
+	messageOn  []byte `yaml:"-"`
+	messageOff []byte `yaml:"-"`
+}
+
+type ButtonType string
+
+const (
+	ButtonTypeRadio  ButtonType = "radio"
+	ButtonTypeToggle ButtonType = "toggle"
+	ButtonTypeClick  ButtonType = "click"
+)
+
+type buttonRequest struct {
+	Index   int  `json:"index"`
+	Enabled bool `json:"enabled"`
+}
+
+type FootSwitch struct {
+	send    func([]byte) error
+	buttons []Button
+}
+
+func (f *FootSwitch) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, page)
+		f.handleGet(w)
 
 	case http.MethodPost:
-		f.mu.Lock()
-		newState := !f.enabled
-
-		message := f.disableMsg
-		if newState {
-			message = f.enableMsg
-		}
-
-		if err := f.send(message); err != nil {
-			f.mu.Unlock()
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		f.enabled = newState
-		f.mu.Unlock()
-
-		w.WriteHeader(http.StatusNoContent)
+		f.handlePost(w, r)
 
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (f *FootSwitch) handleGet(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/html")
+
+	page, err := buildPage(f.buttons)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "failed to build page", http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := fmt.Fprint(w, page); err != nil {
+		log.Println(err)
+	}
+}
+
+func (f *FootSwitch) handlePost(w http.ResponseWriter, r *http.Request) {
+	var request buttonRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if request.Index < 0 || request.Index >= len(f.buttons) {
+		http.Error(w, "invalid button index", http.StatusBadRequest)
+		return
+	}
+
+	button := &f.buttons[request.Index]
+
+	var message []byte
+
+	switch button.Type {
+	case ButtonTypeClick, ButtonTypeRadio:
+		message = button.messageOn
+
+	case ButtonTypeToggle:
+		if request.Enabled {
+			message = button.messageOn
+		} else {
+			message = button.messageOff
+		}
+
+	default:
+		http.Error(w, "invalid button type", http.StatusBadRequest)
+		return
+	}
+
+	if err := f.send(message); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func loadConfig(filename string) (Config, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return Config{}, err
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Println(err)
+		}
+	}()
+
+	var config Config
+
+	decoder := yaml.NewDecoder(file)
+	decoder.KnownFields(true)
+
+	if err := decoder.Decode(&config); err != nil {
+		return Config{}, fmt.Errorf("parse config: %w", err)
+	}
+
+	if err := validator.New().Struct(config); err != nil {
+		return Config{}, fmt.Errorf("validate config: %w", err)
+	}
+
+	return config, nil
 }
 
 func parseHex(s string) ([]byte, error) {
@@ -127,88 +171,234 @@ func localIP() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Println(err)
+		}
+	}()
 
 	return conn.LocalAddr().(*net.UDPAddr).IP.String(), nil
 }
+
+func buildPage(buttons []Button) (string, error) {
+	var html strings.Builder
+
+	if err := pageTemplate.Execute(&html, buttons); err != nil {
+		return "", err
+	}
+
+	return html.String(), nil
+}
+
+var pageTemplate = template.Must(template.New("page").Parse(`
+<!doctype html>
+<html>
+<head>
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1,
+                 maximum-scale=1, user-scalable=no">
+  <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column-reverse;
+      box-sizing: border-box;
+      border: 3px solid yellow;
+      border-bottom: none;
+    }
+
+    .button {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+    }
+
+    .button:not(:last-child) {
+      border-bottom: 3px solid yellow;
+    }
+
+    .button::after {
+      content: "";
+      width: 120px;
+      height: 120px;
+      border: 3px solid yellow;
+      border-radius: 50%;
+      background: red;
+    }
+
+    .button.pressed::after {
+      opacity: 0.5;
+    }
+
+    .button.enabled::after {
+      background: green;
+    }
+
+    .caption {
+      position: absolute;
+      right: calc(50% + 75px);
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      color: yellow;
+      font-size: 24px;
+    }
+  </style>
+</head>
+<body>
+{{ $activeRadio := false }}
+{{ range $i, $button := .}}
+  <div
+    class="button{{ if and (not $activeRadio) (eq $button.Type "radio") }} enabled{{ end }}"
+    data-type="{{ $button.Type }}"
+    data-index="{{ $i }}"
+  >
+    <span class="caption">{{ $button.Caption }}</span>
+  </div>
+  {{ if eq $button.Type "radio" }}
+    {{ $activeRadio = true }}
+  {{ end }}
+{{ end }}
+
+<script>
+  let selectedRadioButton = document.querySelector('.button.enabled[data-type="radio"]');
+
+  document.querySelectorAll('.button').forEach((button, index) => {
+    button.addEventListener('touchstart', e => {
+      if (e.touches.length > 1 || button === selectedRadioButton) return;
+      button.classList.toggle('enabled');
+      button.classList.toggle('pressed');
+    });
+
+    button.addEventListener('touchend', e => {
+      if (e.touches.length > 0 || button === selectedRadioButton) return;
+      button.classList.toggle('pressed');
+
+      if (button.dataset.type === 'click') {
+        button.classList.toggle('enabled');
+      }
+
+      if (button.dataset.type === 'radio') {
+        selectedRadioButton.classList.remove('enabled');
+        selectedRadioButton = button;
+      }
+
+      fetch(location.href, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          index: Number(button.dataset.index),
+          enabled: button.classList.contains('enabled'),
+        })
+      });
+    });
+  });
+</script>
+</body>
+</html>
+`))
 
 func main() {
 	parser := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
 	parser.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s -m DEVICE [-e HEX] [-d HEX] [-p PORT]\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Use your smartphone as a MIDI footswitch.\n\n")
+		fmt.Fprintf(
+			os.Stderr,
+			"Usage: %s [-f CONFIG] [-v] [-h]\n\n",
+			os.Args[0],
+		)
+		fmt.Fprintln(os.Stderr, "Use your smartphone as a MIDI footswitch.")
+		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Options:")
 		parser.PrintDefaults()
 	}
 
-	HTTPServerPort := parser.Int(
-		"p",
-		8080,
-		"HTTP server port",
+	configFlag := parser.String(
+		"f",
+		"config.yaml",
+		"config file path",
 	)
 
-	MIDIDevicePath := parser.String(
-		"m",
-		"/dev/snd/midiC3D1",
-		"MIDI device path",
-	)
-
-	enableMIDIHexMessage := parser.String(
-		"e",
-		"C0 01",
-		"enable MIDI hex message",
-	)
-
-	disableMIDIHexMessage := parser.String(
-		"d",
-		"C0 00",
-		"disable MIDI hex message",
-	)
-
-	showVersion := parser.Bool(
+	versionFlag := parser.Bool(
 		"v",
 		false,
 		"print version and exit",
 	)
 
-	parser.Parse(os.Args[1:])
+	_ = parser.Parse(os.Args[1:])
 
-	if *showVersion {
+	if *versionFlag {
 		fmt.Println(version)
 		return
 	}
 
-	enableMsg, err := parseHex(*enableMIDIHexMessage)
+	config, err := loadConfig(*configFlag)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
 
-	disableMsg, err := parseHex(*disableMIDIHexMessage)
+	dev, err := os.OpenFile(config.Device, os.O_WRONLY, 0)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
-
-	dev, err := os.OpenFile(*MIDIDevicePath, os.O_WRONLY, 0)
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
-	defer dev.Close()
+	defer func() {
+		if err := dev.Close(); err != nil {
+			log.Println(err)
+		}
+	}()
 
 	send := func(msg []byte) error {
 		_, err := dev.Write(msg)
 		return err
 	}
 
-	footswitch := &Footswitch{
-		send:       send,
-		enableMsg:  enableMsg,
-		disableMsg: disableMsg,
+	for i := range config.Buttons {
+		button := &config.Buttons[i]
+
+		button.messageOn, err = parseHex(button.MessageOn)
+		if err != nil {
+			log.Fatalf("error: %v", err)
+		}
+
+		if button.MessageOff != "" {
+			button.messageOff, err = parseHex(button.MessageOff)
+			if err != nil {
+				log.Fatalf("error: %v", err)
+			}
+		}
+	}
+
+	radioCount := 0
+
+	for _, button := range config.Buttons {
+		if button.Type == ButtonTypeRadio {
+			radioCount++
+		}
+	}
+
+	if radioCount == 1 {
+		log.Fatalf("error: radio type button setup requires at least two instances")
+	}
+
+	footSwitch := &FootSwitch{
+		send:    send,
+		buttons: config.Buttons,
 	}
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%d", *HTTPServerPort),
-		Handler: footswitch,
+		Addr:    fmt.Sprintf("0.0.0.0:%d", config.Port),
+		Handler: footSwitch,
 	}
 
 	ip, err := localIP()
@@ -217,15 +407,15 @@ func main() {
 	}
 
 	fmt.Printf(
-		"Connect your smartphone to the same WI-FI network and open http://%s:%d\n",
+		"Connect your smartphone to the same Wi-Fi network and open http://%s:%d\n",
 		ip,
-		*HTTPServerPort,
+		config.Port,
 	)
 
 	go func() {
 		if err := server.ListenAndServe(); err != nil &&
 			err != http.ErrServerClosed {
-			log.Fatal(err)
+			log.Fatalf("error: %v", err)
 		}
 	}()
 
@@ -233,5 +423,5 @@ func main() {
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	<-sig
 
-	server.Close()
+	_ = server.Close()
 }

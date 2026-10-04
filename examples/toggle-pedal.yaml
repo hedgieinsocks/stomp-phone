@@ -1,0 +1,8 @@
+# one button to toggle pedal via CC# 3 message
+port: 8080
+device: /dev/snd/midiC3D1
+buttons:
+  - caption: pedal
+    type: toggle
+    messageOn: B0 03 7F
+    messageOff: B0 03 7F
