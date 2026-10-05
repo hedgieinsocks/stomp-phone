@@ -18,7 +18,9 @@ jobs:
       - run: |
           go get .
       - run: |
-          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o stomp-phone-${{ github.ref_name }}-linux-x64
+          sudo apt-get update && sudo apt-get install -y upx-ucl
+      - run: |
+          make build BIN=stomp-phone-${{ github.ref_name }}-linux-x64
       - uses: ncipollo/release-action@v1
         with:
           artifacts: "stomp-phone*"

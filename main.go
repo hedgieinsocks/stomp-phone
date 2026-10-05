@@ -14,35 +14,68 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/go-playground/validator/v10"
 	"gopkg.in/yaml.v3"
 )
 
-const version = "0.2.0"
+const version = "0.2.1"
 
 type Config struct {
-	Port    int      `yaml:"port" validate:"required"`
-	Device  string   `yaml:"device" validate:"required"`
-	Buttons []Button `yaml:"buttons" validate:"required,min=1,max=3,dive"`
+	Port    int      `yaml:"port"`
+	Device  string   `yaml:"device"`
+	Buttons []Button `yaml:"buttons"`
 }
 
 type Button struct {
-	Type       ButtonType `yaml:"type" validate:"required,oneof=radio toggle click"`
-	Caption    string     `yaml:"caption" validate:"required"`
-	MessageOn  string     `yaml:"messageOn" validate:"required"`
-	MessageOff string     `yaml:"messageOff" validate:"required_if=Type toggle"`
+	Type       string `yaml:"type"`
+	Caption    string `yaml:"caption"`
+	MessageOn  string `yaml:"messageOn"`
+	MessageOff string `yaml:"messageOff"`
 
 	messageOn  []byte `yaml:"-"`
 	messageOff []byte `yaml:"-"`
 }
 
-type ButtonType string
-
 const (
-	ButtonTypeRadio  ButtonType = "radio"
-	ButtonTypeToggle ButtonType = "toggle"
-	ButtonTypeClick  ButtonType = "click"
+	ButtonTypeRadio  = "radio"
+	ButtonTypeToggle = "toggle"
+	ButtonTypeClick  = "click"
 )
+
+func validateConfig(c Config) error {
+	if c.Port == 0 {
+		return fmt.Errorf("port is required")
+	}
+
+	if c.Device == "" {
+		return fmt.Errorf("device is required")
+	}
+
+	if len(c.Buttons) < 1 || len(c.Buttons) > 3 {
+		return fmt.Errorf("buttons: must have 1-3 entries")
+	}
+
+	for i, b := range c.Buttons {
+		switch b.Type {
+		case ButtonTypeRadio, ButtonTypeToggle, ButtonTypeClick:
+		default:
+			return fmt.Errorf("buttons[%d]: invalid type %q", i, b.Type)
+		}
+
+		if b.Caption == "" {
+			return fmt.Errorf("buttons[%d]: caption is required", i)
+		}
+
+		if b.MessageOn == "" {
+			return fmt.Errorf("buttons[%d]: messageOn is required", i)
+		}
+
+		if b.Type == ButtonTypeToggle && b.MessageOff == "" {
+			return fmt.Errorf("buttons[%d]: messageOff is required for toggle type", i)
+		}
+	}
+
+	return nil
+}
 
 type buttonRequest struct {
 	Index   int  `json:"index"`
@@ -50,7 +83,7 @@ type buttonRequest struct {
 }
 
 type FootSwitch struct {
-	send    func([]byte) error
+	device  *os.File
 	buttons []Button
 }
 
@@ -115,7 +148,7 @@ func (f *FootSwitch) handlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := f.send(message); err != nil {
+	if _, err := f.device.Write(message); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -143,7 +176,7 @@ func loadConfig(filename string) (Config, error) {
 		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
 
-	if err := validator.New().Struct(config); err != nil {
+	if err := validateConfig(config); err != nil {
 		return Config{}, fmt.Errorf("validate config: %w", err)
 	}
 
@@ -358,11 +391,6 @@ func main() {
 		}
 	}()
 
-	send := func(msg []byte) error {
-		_, err := dev.Write(msg)
-		return err
-	}
-
 	for i := range config.Buttons {
 		button := &config.Buttons[i]
 
@@ -392,7 +420,7 @@ func main() {
 	}
 
 	footSwitch := &FootSwitch{
-		send:    send,
+		device:  dev,
 		buttons: config.Buttons,
 	}
 
