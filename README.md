@@ -11,7 +11,7 @@ Use your smartphone as a MIDI footswitch
 
 A simple app to serve an HTTP page with up to 3 buttons that issue MIDI commands to a virtual raw MIDI device.
 
-<img src="assets/screenshot.jpg" width="50%">
+<img src="assets/screenshot.png">
 
 It was created as a companion app for standalone [TONE3000 plugin](https://github.com/tone-3000/tone3000-plugin) to quickly switch between clean, crunch and overdrive profiles during bedroom jams. But it should work for any other plugin.
 
@@ -54,8 +54,8 @@ IO  hw:3,3    Virtual Raw MIDI (16 subdevices)
 Download the app to your `PATH` and make it executable:
 
 ```sh
-curl -sL https://github.com/hedgieinsocks/stomp-phone/releases/download/v0.2.1/stomp-phone-v0.2.1-linux-x64 -o ~/.local/bin/stomp-phone
-chmod u+x ~/.local/bin/stomp-phone
+❯ curl -sL https://github.com/hedgieinsocks/stomp-phone/releases/download/v0.2.2/stomp-phone-v0.2.2-linux-x64 -o ~/.local/bin/stomp-phone
+❯ chmod u+x ~/.local/bin/stomp-phone
 ```
 
 ## 🔧 Configuration

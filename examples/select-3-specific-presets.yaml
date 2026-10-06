@@ -1,5 +1,4 @@
 # three buttons to select between three specific presets via PC# 0, PC# 1 and PC# 2 messages
-port: 8080
 device: /dev/snd/midiC3D1
 buttons:
   - caption: clean

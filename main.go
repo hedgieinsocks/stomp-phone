@@ -17,7 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const version = "0.2.1"
+const version = "0.2.2"
 
 type Config struct {
 	Port    int      `yaml:"port"`
@@ -30,6 +30,7 @@ type Button struct {
 	Caption    string `yaml:"caption"`
 	MessageOn  string `yaml:"messageOn"`
 	MessageOff string `yaml:"messageOff"`
+	Size       int    `yaml:"size"`
 
 	messageOn  []byte `yaml:"-"`
 	messageOff []byte `yaml:"-"`
@@ -41,9 +42,9 @@ const (
 	ButtonTypeClick  = "click"
 )
 
-func validateConfig(c Config) error {
+func validateConfig(c *Config) error {
 	if c.Port == 0 {
-		return fmt.Errorf("port is required")
+		c.Port = 8080
 	}
 
 	if c.Device == "" {
@@ -54,15 +55,13 @@ func validateConfig(c Config) error {
 		return fmt.Errorf("buttons: must have 1-3 entries")
 	}
 
-	for i, b := range c.Buttons {
+	for i := range c.Buttons {
+		b := &c.Buttons[i]
+
 		switch b.Type {
 		case ButtonTypeRadio, ButtonTypeToggle, ButtonTypeClick:
 		default:
 			return fmt.Errorf("buttons[%d]: invalid type %q", i, b.Type)
-		}
-
-		if b.Caption == "" {
-			return fmt.Errorf("buttons[%d]: caption is required", i)
 		}
 
 		if b.MessageOn == "" {
@@ -71,6 +70,10 @@ func validateConfig(c Config) error {
 
 		if b.Type == ButtonTypeToggle && b.MessageOff == "" {
 			return fmt.Errorf("buttons[%d]: messageOff is required for toggle type", i)
+		}
+
+		if b.Size == 0 {
+			b.Size = 100
 		}
 	}
 
@@ -176,7 +179,7 @@ func loadConfig(filename string) (Config, error) {
 		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
 
-	if err := validateConfig(config); err != nil {
+	if err := validateConfig(&config); err != nil {
 		return Config{}, fmt.Errorf("validate config: %w", err)
 	}
 
@@ -243,8 +246,7 @@ var pageTemplate = template.Must(template.New("page").Parse(`
       display: flex;
       flex-direction: column-reverse;
       box-sizing: border-box;
-      border: 3px solid yellow;
-      border-bottom: none;
+      border-top: 2px solid yellow;
     }
 
     .button {
@@ -254,17 +256,15 @@ var pageTemplate = template.Must(template.New("page").Parse(`
       align-items: center;
       justify-content: center;
       touch-action: none;
-    }
-
-    .button:not(:last-child) {
-      border-bottom: 3px solid yellow;
+      border: 2px solid yellow;
+      border-top: none;
     }
 
     .button::after {
       content: "";
-      width: 120px;
-      height: 120px;
-      border: 3px solid yellow;
+      width: var(--size);
+      height: var(--size);
+      border: 2px solid yellow;
       border-radius: 50%;
       background: red;
     }
@@ -279,11 +279,11 @@ var pageTemplate = template.Must(template.New("page").Parse(`
 
     .caption {
       position: absolute;
-      right: calc(50% + 75px);
+      right: calc(50% + var(--size) / 2 + 10px);
       writing-mode: vertical-rl;
       transform: rotate(180deg);
-      color: yellow;
-      font-size: 24px;
+      color: white;
+      font-size: 20px;
     }
   </style>
 </head>
@@ -294,8 +294,9 @@ var pageTemplate = template.Must(template.New("page").Parse(`
     class="button{{ if and (not $activeRadio) (eq $button.Type "radio") }} enabled{{ end }}"
     data-type="{{ $button.Type }}"
     data-index="{{ $i }}"
+    style="--size: {{ $button.Size }}px"
   >
-    <span class="caption">{{ $button.Caption }}</span>
+    {{ if $button.Caption }}<span class="caption">{{ $button.Caption }}</span>{{ end }}
   </div>
   {{ if eq $button.Type "radio" }}
     {{ $activeRadio = true }}
@@ -351,7 +352,7 @@ func main() {
 			"Usage: %s [-f CONFIG] [-v] [-h]\n\n",
 			os.Args[0],
 		)
-		fmt.Fprintln(os.Stderr, "Use your smartphone as a MIDI footswitch.")
+		fmt.Fprintln(os.Stderr, "Use your smartphone as a MIDI footswitch")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Options:")
 		parser.PrintDefaults()
