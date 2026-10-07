@@ -16,8 +16,12 @@ buttons:
     messageOn: B0 01 7F
     # MIDI hex message sent when the button is deactivated (required for toggle)
     messageOff: B0 01 7F
+    # Caption to display next to the button (optional)
+    caption: SD-1
     # Height & width px override for the button (optional, default=100)
     size: 120
-    # Caption to display next to the button (optional)
-    caption: SD-1    
+    # Color override for the enabled button (optional, default=green)
+    colorOn: purple
+    # Color override for the disabled button (optional, default=red)
+    colorOff: blue
 ```

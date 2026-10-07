@@ -54,7 +54,7 @@ IO  hw:3,3    Virtual Raw MIDI (16 subdevices)
 Download the app to your `PATH` and make it executable:
 
 ```sh
-❯ curl -sL https://github.com/hedgieinsocks/stomp-phone/releases/download/v0.2.2/stomp-phone-v0.2.2-linux-x64 -o ~/.local/bin/stomp-phone
+❯ curl -sL https://github.com/hedgieinsocks/stomp-phone/releases/download/v0.2.3/stomp-phone-v0.2.3-linux-x64 -o ~/.local/bin/stomp-phone
 ❯ chmod u+x ~/.local/bin/stomp-phone
 ```
 

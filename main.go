@@ -17,7 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const version = "0.2.2"
+const version = "0.2.3"
 
 type Config struct {
 	Port    int      `yaml:"port"`
@@ -31,6 +31,8 @@ type Button struct {
 	MessageOn  string `yaml:"messageOn"`
 	MessageOff string `yaml:"messageOff"`
 	Size       int    `yaml:"size"`
+	ColorOn    string `yaml:"colorOn"`
+	ColorOff   string `yaml:"colorOff"`
 
 	messageOn  []byte `yaml:"-"`
 	messageOff []byte `yaml:"-"`
@@ -74,6 +76,14 @@ func validateConfig(c *Config) error {
 
 		if b.Size == 0 {
 			b.Size = 100
+		}
+
+		if b.ColorOn == "" {
+			b.ColorOn = "green"
+		}
+
+		if b.ColorOff == "" {
+			b.ColorOff = "red"
 		}
 	}
 
@@ -266,7 +276,7 @@ var pageTemplate = template.Must(template.New("page").Parse(`
       height: var(--size);
       border: 2px solid yellow;
       border-radius: 50%;
-      background: red;
+      background: var(--color-off);
     }
 
     .button.pressed::after {
@@ -274,7 +284,7 @@ var pageTemplate = template.Must(template.New("page").Parse(`
     }
 
     .button.enabled::after {
-      background: green;
+      background: var(--color-on);
     }
 
     .caption {
@@ -294,7 +304,7 @@ var pageTemplate = template.Must(template.New("page").Parse(`
     class="button{{ if and (not $activeRadio) (eq $button.Type "radio") }} enabled{{ end }}"
     data-type="{{ $button.Type }}"
     data-index="{{ $i }}"
-    style="--size: {{ $button.Size }}px"
+    style="--size: {{ $button.Size }}px; --color-on: {{ $button.ColorOn }}; --color-off: {{ $button.ColorOff }}"
   >
     {{ if $button.Caption }}<span class="caption">{{ $button.Caption }}</span>{{ end }}
   </div>
