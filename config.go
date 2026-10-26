@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 const (
@@ -114,6 +114,9 @@ func normalizeAndValidateConfig(config *Config) error {
 			return fmt.Errorf("buttons[%d]: messageOff is required for toggle type", i)
 		}
 
+		if len(button.Caption) > 12 {
+			return fmt.Errorf("buttons[%d]: caption must contain 12 characters max", i)
+		}
 		if button.Size == 0 {
 			button.Size = defaultButtonSize
 		}

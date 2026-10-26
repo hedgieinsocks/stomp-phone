@@ -162,7 +162,7 @@ var pageTemplate = template.Must(template.New("page").Parse(`
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <style>
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #000; }
-    body { display: flex; flex-direction: column-reverse; box-sizing: border-box; border-top: 2px solid yellow; }
+    body { display: flex; flex-direction: column-reverse; box-sizing: border-box; border-top: 3px solid yellow; }
     .button { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; touch-action: none; border: 2px solid yellow; border-top: none; }
     .button::after { content: ""; width: var(--size); height: var(--size); border: 2px solid yellow; border-radius: 50%; background: var(--color-off); }
     .button.pressed::after { opacity: 0.5; }
